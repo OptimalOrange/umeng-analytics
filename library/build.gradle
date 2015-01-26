@@ -1,0 +1,116 @@
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        // use for publishing
+        classpath 'com.github.dcendents:android-maven-plugin:1.2'
+        classpath "com.jfrog.bintray.gradle:gradle-bintray-plugin:1.1"
+    }
+}
+
+
+apply plugin: 'com.android.library'
+
+group = 'com.umeng.analytics'
+
+android {
+    compileSdkVersion 21
+    buildToolsVersion "21.1.2"
+
+    defaultConfig {
+        minSdkVersion 8
+        targetSdkVersion 21
+        versionCode VERSION_CODE.toInteger()
+        versionName VERSION_NAME
+    }
+
+}
+
+dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+}
+
+
+
+/// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Generate Javadoc ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// stolen from http://stackoverflow.com/questions/23297562/gradle-javadoc-and-android-documentation#answer-24026735
+android.libraryVariants.all { variant ->
+    task("generate${variant.name.capitalize()}Javadoc", type: Javadoc) {
+        failOnError = false
+        options.encoding = 'UTF-8'
+        source = variant.javaCompile.source
+        def androidJar = "${android.sdkDirectory}/platforms/${android.compileSdkVersion}/android.jar"
+
+        //classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
+        classpath += files(variant.javaCompile.classpath.files, androidJar)
+        options {
+            links "http://docs.oracle.com/javase/7/docs/api/"
+            linksOffline "http://d.android.com/reference", "${android.sdkDirectory}/docs/reference"
+        }
+        exclude '**/BuildConfig.java'
+        exclude '**/R.java'
+    }
+}
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ publish ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+apply plugin: 'com.github.dcendents.android-maven'
+
+task androidJavadocsJar(type: Jar, dependsOn: 'generateReleaseJavadoc')
+androidJavadocsJar.doFirst {
+    classifier = 'javadoc'
+    from generateReleaseJavadoc.destinationDir
+}
+
+task androidSourcesJar(type: Jar) {
+    classifier = 'sources'
+    from android.sourceSets.main.java.srcDirs
+}
+
+// 目前本项目没有*.java源代码，androidSourcesJar、androidJavadocsJar生成的jar实际是空的，故暂时不发布它们。
+//artifacts {
+//    archives androidSourcesJar
+//    archives androidJavadocsJar
+//}
+
+/*uploadArchives {
+    repositories.mavenDeployer {
+        pom.groupId = groupId
+        pom.artifactId = artifactId
+        pom.version = version
+        // Add other pom properties here if you want (developer details / licenses)
+        //repository(url: "file://${localReleaseDest}")
+    }
+}*/
+
+if(!hasProperty('BINTRAY_USER') || !hasProperty('BINTRAY_KEY')) return
+
+// see https://github.com/bintray/gradle-bintray-plugin
+apply plugin: 'com.jfrog.bintray'
+
+bintray {
+    user = BINTRAY_USER
+    key = BINTRAY_KEY
+    configurations = ['archives']
+    publish = true //If version should be auto published after an upload
+    pkg {
+        repo = 'maven'
+        if(project.hasProperty('BINTRAY_USER_ORGANIZATION')) {
+            userOrg = BINTRAY_USER_ORGANIZATION
+        }
+        name = "${project.group}:${project.name}"
+        websiteUrl = 'http://dev.umeng.com/analytics/android-doc/integration'
+        issueTrackerUrl = 'https://github.com/OptimalOrange/umeng-analytics/issues'
+        vcsUrl = 'https://github.com/OptimalOrange/umeng-analytics.git'
+        licenses = ['Apache-2.0']
+        labels = ['analytics', 'umeng', 'Android']
+        attributes = ['plat': ['Android']]
+        publicDownloadNumbers = true
+        /*version {
+            name = '1.3.x-Final' //Optional logical version name
+            desc = 'optional, version-specific description'
+            vcsTag = '1.3.0'
+            attributes = ['a': ['ay1', 'ay2', 'ay3'], 'b': ['bee'], c: 'cee']
+        }*/
+    }
+}
